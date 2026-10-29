@@ -1,21 +1,17 @@
 
-
 from pathlib import Path
 import sys
 import time
 import pandas as pd
+
 from nba_api.stats.endpoints import leaguegamelog
-from curl_cffi import requests as curl_requests
 from nba_api.stats.library.http import NBAStatsHTTP
-
-SESSIONE_NBA = curl_requests.Session(impersonate="chrome")
-
-NBAStatsHTTP.get_session = lambda self: SESSIONE_NBA
-
+from curl_cffi import requests as curl_requests
 
 CARTELLA = Path(__file__).parent
 STAGIONI = ["2025-26", "2026-27"]
 TENTATIVI = 3
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -26,7 +22,13 @@ HEADERS = {
     "Origin": "https://www.nba.com",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true",
 }
+
+SESSIONE_NBA = curl_requests.Session(impersonate="chrome")
+NBAStatsHTTP.get_session = lambda self: SESSIONE_NBA
+
 
 def scarica(tipo, stagione):
     ultimo_errore = None
@@ -44,7 +46,7 @@ def scarica(tipo, stagione):
                 season=stagione,
                 season_type_all_star="Regular Season",
                 headers=HEADERS,
-                timeout=120,
+                timeout=30,
             ).get_data_frames()[0]
 
             if not dati.empty:
@@ -55,17 +57,18 @@ def scarica(tipo, stagione):
 
         except Exception as errore:
             ultimo_errore = errore
-            print(f"Richiesta fallita: {errore}", flush=True)
-
+            print(
+                f"Richiesta fallita: {type(errore).__name__}: {errore}",
+                flush=True,
+            )
             if tentativo < TENTATIVI:
-                pausa = tentativo * 15
-                print(f"Nuovo tentativo tra {pausa} secondi...")
-                time.sleep(pausa)
+                time.sleep(3)
 
     raise RuntimeError(
-        f"Download fallito per {tipo}, stagione {stagione} "
-        f"dopo {TENTATIVI} tentativi: {ultimo_errore}"
-    )
+        f"Download fallito per {tipo}, stagione {stagione}"
+    ) from ultimo_errore
+
+    
 
 
 def aggiorna(nome_file, nuovi, tipo):
