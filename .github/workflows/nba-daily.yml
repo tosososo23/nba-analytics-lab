@@ -1,0 +1,59 @@
+﻿name: NBA Daily Update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Italian time
+        id: clock
+        shell: bash
+        run: |
+          hour=$(TZ=Europe/Rome date +%H)
+          if [ "$hour" = "08" ]; then
+            echo "run_update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_update=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.clock.outputs.run_update == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.clock.outputs.run_update == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.clock.outputs.run_update == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Update NBA data
+        if: steps.clock.outputs.run_update == 'true' || github.event_name == 'workflow_dispatch'
+        run: python scarica_dati.py
+
+      - name: Save updated CSV files
+        if: steps.clock.outputs.run_update == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add player_games.csv team_games.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "Update daily NBA data"
+            git push
+          else
+            echo "Nessuna modifica ai CSV."
+          fi
