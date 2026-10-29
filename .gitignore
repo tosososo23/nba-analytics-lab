@@ -1,0 +1,10 @@
+
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+.env
+aggiornamenti.log
+*.backup
+player_games.csv
+team_games.csv
