@@ -5,6 +5,13 @@ import sys
 import time
 import pandas as pd
 from nba_api.stats.endpoints import leaguegamelog
+from curl_cffi import requests as curl_requests
+from nba_api.stats.library.http import NBAStatsHTTP
+
+SESSIONE_NBA = curl_requests.Session(impersonate="chrome")
+
+NBAStatsHTTP.get_session = lambda self: SESSIONE_NBA
+
 
 CARTELLA = Path(__file__).parent
 STAGIONI = ["2025-26", "2026-27"]
