@@ -1,39 +1,68 @@
 
+
 from pathlib import Path
+import sys
 import time
 import pandas as pd
 from nba_api.stats.endpoints import leaguegamelog
 
 CARTELLA = Path(__file__).parent
 STAGIONI = ["2025-26", "2026-27"]
+TENTATIVI = 3
 
 
 def scarica(tipo, stagione):
-    print(f"Scarico {tipo}, stagione {stagione}...")
-    dati = leaguegamelog.LeagueGameLog(
-        player_or_team_abbreviation=tipo,
-        season=stagione,
-        season_type_all_star="Regular Season",
-        timeout=90,
-    ).get_data_frames()[0]
+    ultimo_errore = None
 
-    if not dati.empty:
-        dati["SEASON"] = stagione
+    for tentativo in range(1, TENTATIVI + 1):
+        try:
+            print(
+                f"Scarico {tipo}, stagione {stagione} "
+                f"(tentativo {tentativo}/{TENTATIVI})...",
+                flush=True,
+            )
 
-    print(f"Righe ricevute: {len(dati)}")
-    return dati
+            dati = leaguegamelog.LeagueGameLog(
+                player_or_team_abbreviation=tipo,
+                season=stagione,
+                season_type_all_star="Regular Season",
+                timeout=120,
+            ).get_data_frames()[0]
+
+            if not dati.empty:
+                dati["SEASON"] = stagione
+
+            print(f"Righe ricevute: {len(dati)}", flush=True)
+            return dati
+
+        except Exception as errore:
+            ultimo_errore = errore
+            print(f"Richiesta fallita: {errore}", flush=True)
+
+            if tentativo < TENTATIVI:
+                pausa = tentativo * 15
+                print(f"Nuovo tentativo tra {pausa} secondi...")
+                time.sleep(pausa)
+
+    raise RuntimeError(
+        f"Download fallito per {tipo}, stagione {stagione} "
+        f"dopo {TENTATIVI} tentativi: {ultimo_errore}"
+    )
 
 
 def aggiorna(nome_file, nuovi, tipo):
     percorso = CARTELLA / nome_file
 
     if nuovi.empty:
-        print(f"Nessun dato nuovo per {nome_file}.")
-        return
+        raise RuntimeError(f"Nessun dato ricevuto per {nome_file}.")
 
     if percorso.exists():
         vecchi = pd.read_csv(percorso, low_memory=False)
-        dati = pd.concat([vecchi, nuovi], ignore_index=True, sort=False)
+        dati = pd.concat(
+            [vecchi, nuovi],
+            ignore_index=True,
+            sort=False,
+        )
     else:
         dati = nuovi.copy()
 
@@ -46,52 +75,70 @@ def aggiorna(nome_file, nuovi, tipo):
     dati = dati.drop_duplicates(subset=chiavi, keep="last")
 
     temporaneo = percorso.with_suffix(".tmp")
-    dati.to_csv(temporaneo, index=False, encoding="utf-8-sig")
-    temporaneo.replace(percorso)
+    try:
+        dati.to_csv(temporaneo, index=False, encoding="utf-8-sig")
+        temporaneo.replace(percorso)
+    finally:
+        if temporaneo.exists():
+            temporaneo.unlink()
 
     print(f"{nome_file}: {len(dati)} righe totali salvate.")
 
 
 def main():
-    # Backup iniziale: non sovrascrive eventuali copie precedenti.
-    for nome in ["player_games.csv", "team_games.csv"]:
-        originale = CARTELLA / nome
-        backup = CARTELLA / (nome + ".backup")
-
-        if originale.exists() and not backup.exists():
-            backup.write_bytes(originale.read_bytes())
-            print(f"Backup creato: {backup.name}")
-
     giocatori = []
     squadre = []
+    errori = []
 
     for stagione in STAGIONI:
         for tipo, raccolta in [("P", giocatori), ("T", squadre)]:
             try:
                 dati = scarica(tipo, stagione)
-                if not dati.empty:
-                    raccolta.append(dati)
+
+                if dati.empty:
+                    raise RuntimeError(
+                        f"Nessun dato restituito per {tipo}, {stagione}"
+                    )
+
+                raccolta.append(dati)
+
             except Exception as errore:
-                print(f"Errore per {tipo}, {stagione}: {errore}")
+                messaggio = f"{tipo}, {stagione}: {errore}"
+                errori.append(messaggio)
+                print(f"ERRORE: {messaggio}", flush=True)
 
-            time.sleep(2)
+            time.sleep(5)
 
-    if giocatori:
-        aggiorna(
-            "player_games.csv",
-            pd.concat(giocatori, ignore_index=True),
-            "P",
+    # Non aggiornare i CSV se anche una sola richiesta è fallita.
+    # In questo modo un download parziale non viene pubblicato.
+    if errori:
+        print(
+            "\nAggiornamento annullato. I CSV esistenti "
+            "non sono stati modificati."
         )
+        for errore in errori:
+            print(f"- {errore}")
+        sys.exit(1)
 
-    if squadre:
-        aggiorna(
-            "team_games.csv",
-            pd.concat(squadre, ignore_index=True),
-            "T",
-        )
+    if not giocatori or not squadre:
+        print("Errore: mancano dati per giocatori o squadre.")
+        sys.exit(1)
 
-    print("Download terminato. Controlla eventuali errori.")
+    aggiorna(
+        "player_games.csv",
+        pd.concat(giocatori, ignore_index=True),
+        "P",
+    )
+
+    aggiorna(
+        "team_games.csv",
+        pd.concat(squadre, ignore_index=True),
+        "T",
+    )
+
+    print("Download e aggiornamento completati.", flush=True)
 
 
 if __name__ == "__main__":
     main()
+
