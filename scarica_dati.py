@@ -9,7 +9,17 @@ from nba_api.stats.endpoints import leaguegamelog
 CARTELLA = Path(__file__).parent
 STAGIONI = ["2025-26", "2026-27"]
 TENTATIVI = 3
-
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 def scarica(tipo, stagione):
     ultimo_errore = None
@@ -22,12 +32,13 @@ def scarica(tipo, stagione):
                 flush=True,
             )
 
-            dati = leaguegamelog.LeagueGameLog(
-                player_or_team_abbreviation=tipo,
-                season=stagione,
-                season_type_all_star="Regular Season",
-                timeout=120,
-            ).get_data_frames()[0]
+          dati = leaguegamelog.LeagueGameLog(
+    player_or_team_abbreviation=tipo,
+    season=stagione,
+    season_type_all_star="Regular Season",
+    headers=HEADERS,
+    timeout=120,
+).get_data_frames()[0]
 
             if not dati.empty:
                 dati["SEASON"] = stagione
