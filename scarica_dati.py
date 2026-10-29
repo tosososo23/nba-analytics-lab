@@ -32,13 +32,13 @@ def scarica(tipo, stagione):
                 flush=True,
             )
 
-          dati = leaguegamelog.LeagueGameLog(
-    player_or_team_abbreviation=tipo,
-    season=stagione,
-    season_type_all_star="Regular Season",
-    headers=HEADERS,
-    timeout=120,
-).get_data_frames()[0]
+            dati = leaguegamelog.LeagueGameLog(
+                player_or_team_abbreviation=tipo,
+                season=stagione,
+                season_type_all_star="Regular Season",
+                headers=HEADERS,
+                timeout=120,
+            ).get_data_frames()[0]
 
             if not dati.empty:
                 dati["SEASON"] = stagione

@@ -1,0 +1,44 @@
+
+name: Aggiornamento quotidiano NBA
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aggiorna-dati:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scarica il repository
+        uses: actions/checkout@v4
+
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa le dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Aggiorna i dati NBA
+        run: python scarica_dati.py
+
+      - name: Salva i CSV aggiornati su GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add player_games.csv team_games.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "Aggiornamento quotidiano dati NBA"
+            git push
+          else
+            echo "Nessun cambiamento nei CSV."
+          fi
